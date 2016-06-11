@@ -28,8 +28,49 @@ const KEY_RETURN = 65293;
 const KEY_ENTER  = 65421;
 const BASE_TASKS = "Do something\nDo something else\nDo more stuff\nDo that again\n";
 
+const GTGIface = '<node>				\
+<interface name="org.gnome.GTG">			\
+							\
+<method name="ModifyTask">				\
+   <arg direction="in"  type="v" name="tid" />		\
+   <arg direction="in"  type="v" name="task_data" />	\
+   <arg direction="out" type="a{sv}" name="new_task" />	\
+</method>						\
+							\
+<method name="NewTask">					\
+   <arg direction="in"  type="s" name="status" />	\
+   <arg direction="in"  type="s" name="title" />	\
+   <arg direction="in"  type="s" name="duedate" />	\
+   <arg direction="in"  type="s" name="startdate" />	\
+   <arg direction="in"  type="s" name="donedate" />	\
+   <arg direction="in"  type="as" name="tags" />	\
+   <arg direction="in"  type="s" name="text" />		\
+   <arg direction="in"  type="as" name="subtasks" />	\
+   <arg direction="out" type="a{sv}" name="newtask" />	\
+</method>						\
+							\
+<method name="GetTask">					\
+   <arg direction="in"  type="v" name="tid" />		\
+</method>						\
+							\
+<method name="SearchTasks">				\
+   <arg direction="in"   type="s" name="query" />	\
+   <arg direction="out"  type="aa{sv}" name="tasks" />	\
+</method>						\
+							\
+</interface>						\
+</node>';
+
+let notifyGTG = 1;
+
 let todolist;	// Todolist instance
 let meta;
+
+// If GTG integration is enabled, connect to DBus
+if (notifyGTG) {
+	const GTGProxy = Gio.DBusProxy.makeProxyWrapper(GTGIface);
+	const gtgInstance = new GTGProxy(Gio.DBus.session, 'org.gnome.GTG', '/org/gnome/GTG');
+}
 
 //----------------------------------------------------------------------
 
@@ -50,7 +91,7 @@ TodoList.prototype._init = function(){
 
 	// Tasks file
 	this.filePath = GLib.get_home_dir() + "/.list.tasks";
-	
+
 	// Locale
 	let locales = this.meta.path + "/locale";
 	Gettext.bindtextdomain('todolist', locales);
@@ -63,7 +104,7 @@ TodoList.prototype._init = function(){
 	this.actor.add_actor(this.buttonText);
 
 	this._buildUI();
-    this._refresh();
+	this._refresh();
 }
 
 // Build popup ui
@@ -215,11 +256,62 @@ function removeTask(text,file){
 	let newText = "";
 	for (let i=0; i<tasks.length; i++)
 	{
+		if (tasks[i] == '' || tasks[i] == '\n')
+			continue;
+
 		// Add task to new text if not empty and not removed task
-		if (tasks[i] != text && tasks[i] != '' && tasks[i] != '\n')
+		if (tasks[i] != text)
 		{
 			newText += tasks[i];
 			newText += "\n";
+		} else {
+
+			// Send message to GTG to create a new task if necessary
+			if (notifyGTG) {
+				try {
+					let tasks = gtgInstance.SearchTasksSync('"' + text + '" ' + "@gnometodo");
+					for (let task in tasks[0]) {
+						let modified_task_data = GLib.Variant.new_array(null, [
+							GLib.Variant.new_dict_entry(
+								GLib.Variant.new_string("status"),
+								GLib.Variant.new_string("Done")
+							),
+							GLib.Variant.new_dict_entry(
+								GLib.Variant.new_string("donedate"),
+								GLib.Variant.new_string(new Date().toJSON().slice(0, 10))
+							),
+							GLib.Variant.new_dict_entry(
+								GLib.Variant.new_string("title"),
+								tasks[0][task]["title"]
+							),
+							GLib.Variant.new_dict_entry(
+								GLib.Variant.new_string("duedate"),
+								tasks[0][task]["duedate"]
+							),
+							GLib.Variant.new_dict_entry(
+								GLib.Variant.new_string("startdate"),
+								tasks[0][task]["startdate"]
+							),
+							GLib.Variant.new_dict_entry(
+								GLib.Variant.new_string("text"),
+								tasks[0][task]["text"]
+							),
+							GLib.Variant.new_dict_entry(
+								GLib.Variant.new_string("tags"),
+								GLib.Variant.new_string("")
+							),
+							GLib.Variant.new_dict_entry(
+								GLib.Variant.new_string("subtask"),
+								GLib.Variant.new_string("")
+							),
+						]);
+
+						gtgInstance.ModifyTaskSync(tasks[0][task]["id"], modified_task_data);
+					}
+				} catch (err) {
+					log(err);
+				}
+			}
 		}
 	}
 	
@@ -229,6 +321,12 @@ function removeTask(text,file){
 	Shell.write_string_to_stream (out, newText);
 	out.close(null);
 }
+
+		// Watch GTG state
+		// 		GTGDBus.DBus.session.watch_name("org.gnome.GTG", false,
+		// 					function() { running=true; loadTasks(); },
+		// 								function() { running=false; loadTasks(); });
+		// 										return true;
 
 // Add task 'text' to file 'file'
 function addTask(text,file)
@@ -253,6 +351,21 @@ function addTask(text,file)
 	let out = f.replace(null, false, Gio.FileCreateFlags.NONE, null);
 	Shell.write_string_to_stream (out, content);
 	out.close(null);
+
+	if (notifyGTG) {
+		// Send message to GTG to create a new task
+		gtgInstance.NewTaskSync(
+			"Active",	// status
+			text, 		// title
+			"", 		// duedate
+			"", 		// startdate
+			"", 		// donedate
+			["@gnometodo"],	// tags
+			"",		// text
+			[]		// subtasks, type as
+		);
+	}
+
 }
 
 //----------------------------------------------------------------------
