@@ -361,7 +361,7 @@ function addTask(text,file)
 			"", 		// startdate
 			"", 		// donedate
 			["@gnometodo"],	// tags
-			"Created on " + new Date().toJSON().slice(0, 10),	// text
+			"Created on " + new Date().toLocaleString(),	// text
 			[]		// subtasks
 		);
 	}
