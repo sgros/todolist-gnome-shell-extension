@@ -264,54 +264,62 @@ function removeTask(text,file){
 		{
 			newText += tasks[i];
 			newText += "\n";
-		} else {
+			continue;
+		}
 
-			// Send message to GTG to create a new task if necessary
-			if (notifyGTG) {
-				try {
-					let tasks = gtgInstance.SearchTasksSync('"' + text + '" ' + "@gnometodo");
-					for (let task in tasks[0]) {
-						let modified_task_data = GLib.Variant.new_array(null, [
-							GLib.Variant.new_dict_entry(
-								GLib.Variant.new_string("status"),
-								GLib.Variant.new_string("Done")
-							),
-							GLib.Variant.new_dict_entry(
-								GLib.Variant.new_string("donedate"),
-								GLib.Variant.new_string(new Date().toJSON().slice(0, 10))
-							),
-							GLib.Variant.new_dict_entry(
-								GLib.Variant.new_string("title"),
-								tasks[0][task]["title"]
-							),
-							GLib.Variant.new_dict_entry(
-								GLib.Variant.new_string("duedate"),
-								tasks[0][task]["duedate"]
-							),
-							GLib.Variant.new_dict_entry(
-								GLib.Variant.new_string("startdate"),
-								tasks[0][task]["startdate"]
-							),
-							GLib.Variant.new_dict_entry(
-								GLib.Variant.new_string("text"),
-								tasks[0][task]["text"]
-							),
-							GLib.Variant.new_dict_entry(
-								GLib.Variant.new_string("tags"),
-								GLib.Variant.new_string("")
-							),
-							GLib.Variant.new_dict_entry(
-								GLib.Variant.new_string("subtask"),
-								GLib.Variant.new_string("")
-							),
-						]);
+		// Send message to GTG to close a task
+		if (!notifyGTG)
+			continue;
 
-						gtgInstance.ModifyTaskSync(tasks[0][task]["id"], modified_task_data);
-					}
-				} catch (err) {
-					log(err);
-				}
+		try {
+			let tasks = gtgInstance.SearchTasksSync('"' + text + '" ' + "@gnometodo");
+
+			for (let task in tasks[0]) {
+
+				let taskText = tasks[0][task]["text"].unpack();
+				taskText = taskText.replace("<content>", "").replace("</content>", "");
+				taskText += "\n\nClosed on: " + new Date().toLocaleString() + " via GS TODO";
+				taskText = "<content>" + taskText + "</content>";
+
+				let modified_task_data = GLib.Variant.new_array(null, [
+					GLib.Variant.new_dict_entry(
+						GLib.Variant.new_string("status"),
+						GLib.Variant.new_string("Done")
+					),
+					GLib.Variant.new_dict_entry(
+						GLib.Variant.new_string("donedate"),
+						GLib.Variant.new_string(new Date().toJSON().slice(0, 10))
+					),
+					GLib.Variant.new_dict_entry(
+						GLib.Variant.new_string("title"),
+						tasks[0][task]["title"]
+					),
+					GLib.Variant.new_dict_entry(
+						GLib.Variant.new_string("duedate"),
+						tasks[0][task]["duedate"]
+					),
+					GLib.Variant.new_dict_entry(
+						GLib.Variant.new_string("startdate"),
+						tasks[0][task]["startdate"]
+					),
+					GLib.Variant.new_dict_entry(
+						GLib.Variant.new_string("text"),
+						GLib.Variant.new_string(taskText)
+					),
+					GLib.Variant.new_dict_entry(
+						GLib.Variant.new_string("tags"),
+						GLib.Variant.new_string("")
+					),
+					GLib.Variant.new_dict_entry(
+						GLib.Variant.new_string("subtask"),
+						GLib.Variant.new_string("")
+					),
+				]);
+
+				gtgInstance.ModifyTaskSync(tasks[0][task]["id"], modified_task_data);
 			}
+		} catch (err) {
+			log(err);
 		}
 	}
 	
@@ -361,7 +369,7 @@ function addTask(text,file)
 			"", 		// startdate
 			"", 		// donedate
 			["@gnometodo"],	// tags
-			"Created on " + new Date().toLocaleString(),	// text
+			"<content><tag>@gnometodo</tag>\n\nCreated on " + new Date().toLocaleString() + " via GS TODO</content>",	// text
 			[]		// subtasks
 		);
 	}
