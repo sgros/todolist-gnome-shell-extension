@@ -58,10 +58,18 @@ const GTGIface = '<node>				\
    <arg direction="out"  type="aa{sv}" name="tasks" />	\
 </method>						\
 							\
+<method name="OpenTaskEditor">				\
+   <arg direction="in"  type="v" name="tid" />		\
+</method>						\
+							\
 </interface>						\
 </node>';
 
+// Should GTG be notified of new tasks and removing of existing tasks?
 let notifyGTG = 1;
+
+// When closing a task, should GTG window be opened so that user can enter additional details?
+let openGTGTaskOnClose = 1;
 
 let todolist;	// Todolist instance
 let meta;
@@ -317,6 +325,10 @@ function removeTask(text,file){
 				]);
 
 				gtgInstance.ModifyTaskSync(tasks[0][task]["id"], modified_task_data);
+
+				if (openGTGTaskOnClose)
+					gtgInstance.OpenTaskEditorSync(tasks[0][task]["id"]);
+
 			}
 		} catch (err) {
 			log(err);
